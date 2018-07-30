@@ -1,12 +1,13 @@
 #!/bin/python3
 
-class Page:
+from raw_content import RawContent
 
-    def __init__(self, location, path):
+class Url:
+
+    def __init__(self, id = 0, location = "", path = ""):
+        self.id = id
         self.location = location
         self.path = path
-        self.status_code = None
-        self.content = None
 
     def download(self, session):
         url_str = "http://{0}{1}".format(self.location, self.path)
@@ -15,17 +16,11 @@ class Page:
                              stream = True,
                              allow_redirects = True)
         if should_download(result):
-            size, urls = extract_urls(url, result)
-            self.status_code = result.status_code
-            self.content = str(result.content)
+            return RawContent(self.id, result.status_code, str(result.content))
+        return None
 
-    def extract_urls(self):
-        size = 0
-        urls = []
-        for match in re.findall('href="[a-z0-9.:/]+"', self.content, re.IGNORECASE):
-            url = urlparse(match[6:-1])
-            urls.append(url)
-        return urls
+    def __str__(self):
+        return "Url(id = {0}, location = {1}, path = {2})".format(self.id, self.location, self.path)
 
 def should_download(result):
     if result.status_code != 200:

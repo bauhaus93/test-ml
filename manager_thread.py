@@ -9,12 +9,7 @@ from urllib.parse import urlparse
 from collections import namedtuple
 
 from db_accessor import DBAccessor
-from task import Task
-
-def handle_job(urls):
-    task = Task(urls)
-    task.execute()
-    return task
+from download_job import DownloadJob
 
 class ManagerThread(threading.Thread):
 
@@ -30,18 +25,20 @@ class ManagerThread(threading.Thread):
             futures = []
             while not self.stop:
                 futures = self.handle_finished_jobs(executor, futures)
-                futures = self.add_new_jobs(executor, futures)
+                futures = self.add_download_jobs(executor, futures)
                 time.sleep(0.5)
 
     def stop_manager(self):
         self.stop = True
         self.join()
 
-    def add_new_jobs(self, executor, futures):
-        while self.db.has_pending_urls() and len(futures) < self.max_workers:
-            urls = self.db.create_request_job()
-            print('Adding new task, size = ', len(urls))
-            futures.append(executor.submit(handle_job, urls))
+    def add_download_jobs(self, executor, futures):
+        while len(futures) < self.max_workers:
+            job = self.db.create_download_job()
+            if not job is None:
+                futures.append(executor.submit(DownloadJob.execute, job))
+            else:
+                break
         return futures
 
     def handle_finished_jobs(self, executor, futures):
@@ -51,6 +48,6 @@ class ManagerThread(threading.Thread):
             except Exception as exc:
                 print("Future generated exception: {0}".format(exc))
             else:
-                print('Persisting results of task')
-                result.persist(self.db)
+                print("persist job")
+                self.db.persist_download_job_result(result)
         return [fut for fut in futures if not fut.done()]

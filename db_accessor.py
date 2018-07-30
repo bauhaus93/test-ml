@@ -4,6 +4,8 @@ import sqlite3
 
 from url import Url
 
+from download_job import DownloadJob
+
 class DBAccessor:
 
     def __init__(self, db_name):
@@ -14,46 +16,20 @@ class DBAccessor:
     def create_tables(self):
         c = self.db_conn.cursor()
         c.execute("""CREATE TABLE IF NOT EXISTS url(
-                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  url_id INTEGER PRIMARY KEY AUTOINCREMENT,
                   location TEXT,
                   path TEXT,
+                  state INTEGER DEFAULT 0 CHECK (state >= 0 AND state <= 3),
+                  time_added INTEGER NOT NULL DEFAULT (DATETIME('now', 'localtime')),
                   CONSTRAINT unique_loc_path UNIQUE(location, path) ON CONFLICT IGNORE
                   )""")
-        c.execute("""CREATE TABLE IF NOT EXISTS url_pending(
-                  url_id INTEGER PRIMARY KEY,
-                  time_added INTEGER NOT NULL DEFAULT (DATETIME('now', 'localtime')),
-                  FOREIGN KEY(url_id) REFERENCES url(id)
-                  )""")
-        c.execute("""CREATE TABLE IF NOT EXISTS url_active(
-                  url_id INTEGER PRIMARY KEY,
-                  FOREIGN KEY(url_id) REFERENCES url(id)
-                  )""")
-        c.execute("""CREATE TABLE IF NOT EXISTS url_visited(
+
+        c.execute("""CREATE TABLE IF NOT EXISTS raw_content(
                   url_id INTEGER PRIMARY KEY,
                   time_visited INTEGER NOT NULL DEFAULT (DATETIME('now', 'localtime')),
-                  status_code INTEGER NOT NULL,
-                  size INTEGER NOT NULL,
-                  FOREIGN KEY(url_id) REFERENCES url(id)
+                  content TEXT,
+                  FOREIGN KEY(url_id) REFERENCES url(url_id) ON DELETE CASCADE
                   )""")
-
-        c.execute("""CREATE TRIGGER IF NOT EXISTS url_insert_trigger
-                  AFTER INSERT ON url
-                  BEGIN
-                    INSERT INTO url_pending(url_id) VALUES(NEW.id);
-                  END;
-                  """)
-        c.execute("""CREATE TRIGGER IF NOT EXISTS url_pending_to_active_trigger
-                  AFTER INSERT ON url_active
-                  BEGIN
-                    DELETE FROM url_pending WHERE url_id = NEW.url_id;
-                  END;
-                  """)
-        c.execute("""CREATE TRIGGER IF NOT EXISTS url_active_to_visited_trigger
-                  AFTER INSERT ON url_visited
-                  BEGIN
-                    DELETE FROM url_active WHERE url_id = NEW.url_id;
-                  END;
-                  """)
         self.db_conn.commit()
 
     def add_url(self, url):
@@ -67,43 +43,43 @@ class DBAccessor:
             c.execute("INSERT INTO url(location, path) VALUES(?, ?)", (url.location, url.path))
         self.db_conn.commit()
 
-    def create_request_job(self, job_size = 50):
-        c = self.db_conn.cursor()
-        c.execute("SELECT id, location, path FROM url_pending INNER JOIN url ON url_pending.url_id = url.id ORDER BY time_added ASC")
-        result = list(map(Url._make, c.fetchmany(job_size)))
-        ids = list(map(lambda url: (url.id,), result))
-        self.set_urls_active(ids)
-        return result
-
-    def set_urls_active(self, url_ids):
-        c = self.db_conn.cursor()
-        c.executemany("INSERT INTO url_active(url_id) VALUES(?)", url_ids)
-        self.db_conn.commit()
-
-    def set_urls_visited(self, urls):
-        c = self.db_conn.cursor()
-        c.executemany("INSERT INTO url_visited(url_id, status_code, size) VALUES(?, ?, ?)", urls)
-        self.db_conn.commit()
-
-    def get_pending_urls(self, limit = 50):
-        c = self.db_conn.cursor()
-        c.execute('SELECT * FROM url_pending ORDER BY time_added ASC')
-        return c.fetchmany(limit)
-
-    def has_pending_urls(self):
-        return self.count_pending_urls() > 0
-
     def count_pending_urls(self):
         c = self.db_conn.cursor()
-        c.execute('SELECT COUNT(*) FROM url_pending')
-        return c.fetchone()[0]
-
-    def count_visited_urls(self):
-        c = self.db_conn.cursor()
-        c.execute('SELECT COUNT(*) FROM url_visited')
+        c.execute("SELECT COUNT(url_id) FROM url WHERE state = 0")
         return c.fetchone()[0]
 
     def count_active_urls(self):
         c = self.db_conn.cursor()
-        c.execute('SELECT COUNT(*) FROM url_active')
+        c.execute("SELECT COUNT(url_id) FROM url WHERE state = 1")
         return c.fetchone()[0]
+
+    def count_visited_urls(self):
+        c = self.db_conn.cursor()
+        c.execute("SELECT COUNT(url_id) FROM url WHERE state = 2")
+        return c.fetchone()[0]
+
+    def count_extracted_urls(self):
+        c = self.db_conn.cursor()
+        c.execute("SELECT COUNT(url_id) FROM url WHERE state = 3")
+        return c.fetchone()[0]
+
+    def has_work(self):
+        c = self.db_conn.cursor()
+        c.execute("SELECT COUNT(url_id) FROM url WHERE state == 0")
+        return c.fetchone()[0] > 0
+
+    def create_download_job(self, limit = 50):
+        c = self.db_conn.cursor()
+        c.execute('SELECT url_id, location, path FROM url WHERE state = 0 ORDER BY time_added ASC')
+        urls = [Url(url[0], url[1], url[2]) for url in c.fetchmany(limit)]
+        if len(urls) == 0:
+            return None
+        c.executemany('UPDATE url SET state = 1 WHERE url_id = ?', [(u.id,) for u in urls])
+        self.db_conn.commit()
+        return DownloadJob(urls)
+
+    def persist_download_job_result(self, result):
+        c = self.db_conn.cursor()
+        c.executemany('INSERT INTO raw_content(url_id, content) VALUES(?, ?)', [(r.url_id, r.content) for r in result])
+        c.executemany('UPDATE url SET state = 2 WHERE url_id = ?', [(r.url_id,) for r in result])
+        self.db_conn.commit()
