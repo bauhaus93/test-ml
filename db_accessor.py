@@ -19,7 +19,7 @@ class DBAccessor:
                   url_id INTEGER PRIMARY KEY AUTOINCREMENT,
                   location TEXT,
                   path TEXT,
-                  state INTEGER DEFAULT 0 CHECK (state >= 0 AND state <= 3),
+                  state INTEGER DEFAULT 0 CHECK (state >= 0 AND state <= 2),
                   time_added INTEGER NOT NULL DEFAULT (DATETIME('now', 'localtime')),
                   CONSTRAINT unique_loc_path UNIQUE(location, path) ON CONFLICT IGNORE
                   )""")
@@ -58,17 +58,7 @@ class DBAccessor:
         c.execute("SELECT COUNT(url_id) FROM url WHERE state = 2")
         return c.fetchone()[0]
 
-    def count_extracted_urls(self):
-        c = self.db_conn.cursor()
-        c.execute("SELECT COUNT(url_id) FROM url WHERE state = 3")
-        return c.fetchone()[0]
-
-    def has_work(self):
-        c = self.db_conn.cursor()
-        c.execute("SELECT COUNT(url_id) FROM url WHERE state == 0")
-        return c.fetchone()[0] > 0
-
-    def create_download_job(self, limit = 50):
+    def create_download_job(self, limit = 25):
         c = self.db_conn.cursor()
         c.execute('SELECT url_id, location, path FROM url WHERE state = 0 ORDER BY time_added ASC')
         urls = [Url(url[0], url[1], url[2]) for url in c.fetchmany(limit)]

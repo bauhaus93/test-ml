@@ -7,6 +7,10 @@ class Url:
     def __init__(self, id = 0, location = "", path = ""):
         self.id = id
         self.location = location
+        if len(path) == 0:
+            path = '/'
+        elif path[0] != '/':
+            path = '/' + path
         self.path = path
 
     def download(self, session):

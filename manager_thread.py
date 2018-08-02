@@ -10,6 +10,7 @@ from collections import namedtuple
 
 from db_accessor import DBAccessor
 from download_job import DownloadJob
+from url_extract import extract_urls
 
 class ManagerThread(threading.Thread):
 
@@ -26,7 +27,7 @@ class ManagerThread(threading.Thread):
             while not self.stop:
                 futures = self.handle_finished_jobs(executor, futures)
                 futures = self.add_download_jobs(executor, futures)
-                time.sleep(0.5)
+                time.sleep(2)
 
     def stop_manager(self):
         self.stop = True
@@ -42,12 +43,17 @@ class ManagerThread(threading.Thread):
         return futures
 
     def handle_finished_jobs(self, executor, futures):
-        for fut in concurrent.futures.as_completed(futures):
-            try:
-                result = fut.result()
-            except Exception as exc:
-                print("Future generated exception: {0}".format(exc))
-            else:
-                print("persist job")
-                self.db.persist_download_job_result(result)
+        for fut in futures:
+            if fut.done():
+                try:
+                    results = fut.result()
+                except Exception as exc:
+                    print("Future generated exception: {0}".format(exc))
+                else:
+                    found_urls = []
+                    for res in results:
+                        if not res[1] is None:
+                            found_urls += extract_urls(res[0], res[1])
+                    self.db.add_urls(found_urls)
+                    self.db.persist_download_job_result([res[1] for res in results if not res[1] is None])
         return [fut for fut in futures if not fut.done()]
