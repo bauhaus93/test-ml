@@ -1,11 +1,10 @@
-#!/bin/python3
-
 from raw_content import RawContent
 
 class Url:
 
-    def __init__(self, id = 0, location = "", path = ""):
+    def __init__(self, id = 0, scheme = "http", location = "", path = ""):
         self.id = id
+        self.scheme = scheme
         self.location = location
         if len(path) == 0:
             path = '/'
@@ -14,11 +13,15 @@ class Url:
         self.path = path
 
     def download(self, session):
-        url_str = "http://{0}{1}".format(self.location, self.path)
-        result = session.get(url_str,
-                             timeout = 3.0,
-                             stream = True,
-                             allow_redirects = True)
+        url_str = "{0}://{1}{2}".format(self.scheme, self.location, self.path)
+        try:
+            result = session.get(url_str,
+                                 timeout = 5.0,
+                                 stream = True,
+                                 allow_redirects = True)
+        except Exception as exc:
+            print("Download from {0} failed: {1}".format(url_str, exc))
+            return None
         if should_download(result):
             return RawContent(self.id, result.status_code, str(result.content))
         return None

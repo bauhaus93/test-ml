@@ -1,5 +1,3 @@
-#!/bin/python3
-
 import concurrent.futures
 import threading
 import time
@@ -34,10 +32,12 @@ class ManagerThread(threading.Thread):
         self.join()
 
     def add_download_jobs(self, executor, futures):
-        while len(futures) < self.max_workers:
-            job = self.db.create_download_job()
+        new_jobs = self.max_workers - len(futures)
+        for i in range(new_jobs):
+            job = self.db.create_download_job(25)
             if not job is None:
                 futures.append(executor.submit(DownloadJob.execute, job))
+                print("active jobs: ", len(futures))
             else:
                 break
         return futures
@@ -48,12 +48,12 @@ class ManagerThread(threading.Thread):
                 try:
                     results = fut.result()
                 except Exception as exc:
-                    print("Future generated exception: {0}".format(exc))
+                    print("Future generated exception:", exc)
                 else:
                     found_urls = []
                     for res in results:
                         if not res[1] is None:
                             found_urls += extract_urls(res[0], res[1])
                     self.db.add_urls(found_urls)
-                    self.db.persist_download_job_result([res[1] for res in results if not res[1] is None])
+                    self.db.persist_download_job_results(results)
         return [fut for fut in futures if not fut.done()]

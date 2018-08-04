@@ -1,6 +1,4 @@
-#!/bin/python3
-
-import re
+from bs4 import BeautifulSoup
 
 from urllib.parse import urlparse
 
@@ -9,12 +7,16 @@ from url import Url
 
 def extract_urls(source_url, raw_content):
     urls = []
-    for match in re.findall('href="[a-z0-9.:/]+"', raw_content.content, re.IGNORECASE):
-        parsed = urlparse(match[6:-1])
-        if len(parsed.netloc) == 0:
-            url = Url(location = source_url.location, path = parsed.path)
-        else:
-            url = Url(location = parsed.netloc, path = parsed.path)
-
-        urls.append(url)
+    soup = BeautifulSoup(raw_content.content, features="html.parser")
+    for link in soup.find_all("a"):
+        parsed = urlparse(link.get("href"))
+        scheme = source_url.scheme
+        location = source_url.location
+        if len(parsed.scheme) > 0:
+            scheme = parsed.scheme
+        if len(parsed.netloc) > 0:
+            location = parsed.netloc
+        if scheme == "http" or scheme == "https":
+            url = Url(scheme = scheme, location = location, path = parsed.path)
+            urls.append(url)
     return urls

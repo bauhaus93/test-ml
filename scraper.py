@@ -1,5 +1,3 @@
-#!/bin/python3
-
 import concurrent.futures
 import http.client
 import sqlite3
@@ -15,7 +13,7 @@ from url import Url
 class Scraper:
     def __init__(self, db_name, max_workers = 10):
         self.db_name = db_name
-        self.max_workers = 10
+        self.max_workers = max_workers
         self.db = DBAccessor(db_name)
 
     def start(self):
@@ -27,7 +25,7 @@ class Scraper:
 
     def add_url(self, url):
         parsedUrl = urlparse(url)
-        self.db.add_url(Url(None, parsedUrl.netloc, parsedUrl.path))
+        self.db.add_url(Url(None, parsedUrl.scheme, parsedUrl.netloc, parsedUrl.path))
 
     def print_stats(self):
         print("Pending: {0}, active: {1}, visited: {2}".format(self.db.count_pending_urls(),
