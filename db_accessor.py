@@ -40,6 +40,12 @@ class DBAccessor:
     def add_urls(self, urls, cursor):
         cursor.executemany("INSERT INTO url(scheme, location, path) VALUES(?, ?, ?)", [(url.scheme, url.location, url.path) for url in urls])
 
+    def set_urls_state(self, urls, state, cursor):
+        cursor.executemany('UPDATE url SET state = ? WHERE url_id = ?', [(state, url.id) for url in urls])
+
+    def add_content(self, source_url, content, cursor):
+        cursor.execute('INSERT INTO content(url_id, content) VALUES(?, ?)', (source_url.id, content))
+
     def count_pending_urls(self):
         c = self.db_conn.cursor()
         c.execute("SELECT COUNT(url_id) FROM url WHERE state = 0")
@@ -66,13 +72,16 @@ class DBAccessor:
         return DownloadJob(urls)
 
     def persist_download_results(self, results):
-        c = self.db_conn.cursor()
+        cursor = self.db_conn.cursor()
         successful_results = [res for res in results if not res.raw_content is None]
         urls = [extract_urls(res.source_url, res.raw_content) for res in successful_results]
         urls = [item for sublist in urls for item in sublist]
-        self.add_urls(urls, c)
-        content = [(res.source_url.id, extract_content(res.raw_content)) for res in successful_results]
-        c.executemany('INSERT INTO content(url_id, content) VALUES(?, ?)',
-                      [c for c in content if not c[1] is None])
-        c.executemany('UPDATE url SET state = 2 WHERE url_id = ?', [(res.source_url.id,) for res in results])
+        self.add_urls(urls, cursor)
+
+        for res in successful_results:
+            content = extract_content(res.raw_content)
+            if content:
+                self.add_content(res.source_url, content, cursor)
+
+        self.set_urls_state([res.source_url for res in results], 2, cursor)
         self.db_conn.commit()
