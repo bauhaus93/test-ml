@@ -11,6 +11,7 @@ class DBAccessor:
         self.db_name = db_name
         self.db_conn = sqlite3.connect(self.db_name)
         self.create_tables()
+        self.move_active_to_pending()
 
     def create_tables(self):
         c = self.db_conn.cursor()
@@ -30,6 +31,26 @@ class DBAccessor:
                   content TEXT,
                   FOREIGN KEY(url_id) REFERENCES url(url_id) ON DELETE CASCADE
                   )""")
+        c.execute("""CREATE TABLE IF NOT EXISTS scrape_location(
+                  location_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  valid_location TEXT UNIQUE NOT NULL
+                  )""")
+
+        c.execute("""CREATE TRIGGER IF NOT EXISTS url_filter
+                  BEFORE INSERT ON url
+                  FOR EACH ROW
+                  BEGIN
+                    SELECT RAISE(IGNORE)
+                    WHERE NOT EXISTS (SELECT 1
+                                      FROM scrape_location
+                                      WHERE NEW.location LIKE '%' || valid_location);
+                  END;
+                  """)
+        self.db_conn.commit()
+
+    def add_scrape_location(self, location):
+        c = self.db_conn.cursor()
+        c.execute("INSERT INTO scrape_location(valid_location) VALUES(?)", (location,))
         self.db_conn.commit()
 
     def add_url(self, url):
@@ -60,6 +81,11 @@ class DBAccessor:
         c = self.db_conn.cursor()
         c.execute("SELECT COUNT(url_id) FROM url WHERE state = 2")
         return c.fetchone()[0]
+
+    def move_active_to_pending(self):
+        c = self.db_conn.cursor()
+        c.execute("UPDATE url SET state = 0 WHERE state = 1")
+        self.db_conn.commit()
 
     def create_download_job(self, limit):
         c = self.db_conn.cursor()

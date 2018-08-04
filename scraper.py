@@ -27,6 +27,9 @@ class Scraper:
         parsedUrl = urlparse(url)
         self.db.add_url(Url(None, parsedUrl.scheme, parsedUrl.netloc, parsedUrl.path))
 
+    def add_scrape_location(self, location):
+        self.db.add_scrape_location(location)
+
     def print_stats(self):
         print("Pending: {0}, active: {1}, visited: {2}".format(self.db.count_pending_urls(),
                                                                self.db.count_active_urls(),
@@ -34,6 +37,7 @@ class Scraper:
 
 if __name__ == '__main__':
     scraper = Scraper("scrape.db")
+    scraper.add_scrape_location("orf.at")
     scraper.add_url("http://orf.at/")
     scraper.start()
     while True:
