@@ -8,7 +8,7 @@ from collections import namedtuple
 
 from db_accessor import DBAccessor
 from download_job import DownloadJob
-from url_extract import extract_urls
+
 
 class ManagerThread(threading.Thread):
 
@@ -50,10 +50,5 @@ class ManagerThread(threading.Thread):
                 except Exception as exc:
                     print("Future generated exception:", exc)
                 else:
-                    found_urls = []
-                    for res in results:
-                        if not res[1] is None:
-                            found_urls += extract_urls(res[0], res[1])
-                    self.db.add_urls(found_urls)
-                    self.db.persist_download_job_results(results)
+                    self.db.persist_download_results(results)
         return [fut for fut in futures if not fut.done()]

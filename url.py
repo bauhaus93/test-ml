@@ -23,7 +23,7 @@ class Url:
             print("Download from {0} failed: {1}".format(url_str, exc))
             return None
         if should_download(result):
-            return RawContent(self.id, result.status_code, str(result.content))
+            return RawContent(self.id, result.status_code, str(result.text))
         return None
 
     def __str__(self):

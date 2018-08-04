@@ -3,6 +3,7 @@ import sqlite3
 from url import Url
 
 from download_job import DownloadJob
+from extractor import extract_urls, extract_content
 
 class DBAccessor:
 
@@ -23,7 +24,7 @@ class DBAccessor:
                   CONSTRAINT unique_loc_path UNIQUE(location, path) ON CONFLICT IGNORE
                   )""")
 
-        c.execute("""CREATE TABLE IF NOT EXISTS raw_content(
+        c.execute("""CREATE TABLE IF NOT EXISTS content(
                   url_id INTEGER PRIMARY KEY,
                   time_visited INTEGER NOT NULL DEFAULT (DATETIME('now', 'localtime')),
                   content TEXT,
@@ -36,11 +37,8 @@ class DBAccessor:
         c.execute("INSERT INTO url(scheme, location, path) VALUES(?, ?, ?)", (url.scheme, url.location, url.path))
         self.db_conn.commit()
 
-    def add_urls(self, urls):
-        c = self.db_conn.cursor()
-        for url in urls:
-            c.execute("INSERT INTO url(scheme, location, path) VALUES(?, ?, ?)", (url.scheme, url.location, url.path))
-        self.db_conn.commit()
+    def add_urls(self, urls, cursor):
+        cursor.executemany("INSERT INTO url(scheme, location, path) VALUES(?, ?, ?)", [(url.scheme, url.location, url.path) for url in urls])
 
     def count_pending_urls(self):
         c = self.db_conn.cursor()
@@ -67,8 +65,14 @@ class DBAccessor:
         self.db_conn.commit()
         return DownloadJob(urls)
 
-    def persist_download_job_results(self, results):
+    def persist_download_results(self, results):
         c = self.db_conn.cursor()
-        c.executemany('INSERT INTO raw_content(url_id, content) VALUES(?, ?)', [(r[1].url_id, r[1].content) for r in results if not r[1] is None])
-        c.executemany('UPDATE url SET state = 2 WHERE url_id = ?', [(r[0].id,) for r in results])
+        successful_results = [res for res in results if not res.raw_content is None]
+        urls = [extract_urls(res.source_url, res.raw_content) for res in successful_results]
+        urls = [item for sublist in urls for item in sublist]
+        self.add_urls(urls, c)
+        content = [(res.source_url.id, extract_content(res.raw_content)) for res in successful_results]
+        c.executemany('INSERT INTO content(url_id, content) VALUES(?, ?)',
+                      [c for c in content if not c[1] is None])
+        c.executemany('UPDATE url SET state = 2 WHERE url_id = ?', [(res.source_url.id,) for res in results])
         self.db_conn.commit()

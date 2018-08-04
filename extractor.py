@@ -1,3 +1,5 @@
+import re
+
 from bs4 import BeautifulSoup
 
 from urllib.parse import urlparse
@@ -19,4 +21,18 @@ def extract_urls(source_url, raw_content):
         if scheme == "http" or scheme == "https":
             url = Url(scheme = scheme, location = location, path = parsed.path)
             urls.append(url)
+
     return urls
+
+def extract_content(raw_content):
+    soup = BeautifulSoup(raw_content.content, "html5lib")
+    text = [text for text in soup.stripped_strings]
+    regex = re.compile(r'[\w\.\?\-! „“,]+', re.UNICODE)
+    full_text = ""
+    for block in text:
+        bare = block.replace(r"\n", "")
+        if regex.fullmatch(bare) and len(bare) > 50:
+            full_text = full_text + "\n" + bare
+    if len(full_text) < 500:
+        return None
+    return full_text[1:]

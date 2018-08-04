@@ -4,6 +4,7 @@ import itertools
 from urllib.parse import urlparse
 
 from url import Url
+from result import DownloadResult
 
 class DownloadJob:
 
@@ -12,4 +13,4 @@ class DownloadJob:
 
     def execute(self):
         session = requests.Session()
-        return [(url, url.download(session)) for url in self.urls]
+        return [DownloadResult(source_url = url, raw_content = url.download(session)) for url in self.urls]
