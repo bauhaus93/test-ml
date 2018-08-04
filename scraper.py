@@ -10,6 +10,11 @@ from db_accessor import DBAccessor
 from manager_thread import ManagerThread
 from url import Url
 
+
+#TODO enable usage of imported cookies
+#     jar = requests.cookies.RequestsCookieJar()
+#     jar.set(key, value, secure=secure, domain=domain, rest=rest)
+
 class Scraper:
     def __init__(self, db_name, max_workers = 10):
         self.db_name = db_name
@@ -37,8 +42,12 @@ class Scraper:
 
 if __name__ == '__main__':
     scraper = Scraper("scrape.db")
-    scraper.add_scrape_location("orf.at")
-    scraper.add_url("http://orf.at/")
+    #scraper.add_scrape_location("orf.at")
+    #scraper.add_url("http://orf.at/")
+    #scraper.add_scrape_location("oe24.at")
+    #scraper.add_url("http://oe24.at")
+    scraper.add_scrape_location("derstandard.at")
+    scraper.add_url("https://derstandard.at/")
     scraper.start()
     while True:
         try:
