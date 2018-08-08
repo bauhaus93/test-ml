@@ -3,26 +3,32 @@ import csv
 import urllib
 
 class NewsSpider(scrapy.Spider):
-    name = "news"
-    allowed_domains = ["orf.at"]
-    start_urls = ["http://orf.at/"]
+    name = "NewsSpider"
+    scrape_counter = 0
     custom_settings = {
-        'LOG_LEVEL': 'INFO',
-    }
+        'LOG_LEVEL': 'INFO' }
+
+    def __init__(self, target_domain, text_parser, scrape_max = 1000, **kwargs):
+        super().__init__(**kwargs)
+        self.start_urls = ["http://{0}/".format(target_domain)]
+        self.allowed_domains = [target_domain]
+        self.scrape_max = scrape_max
+        self.text_parser = text_parser
+
     def parse(self, response):
-        for sel in response.xpath('//body'):
-            full_text = ""
-            for text in sel.xpath('//div[@id="ss-storyText"]/*/text()').extract():
-                if len(text) > 100:
-                    full_text = full_text + "\n" + text
-            full_text = full_text[1:]
-
-            if len(full_text) > 500:
-                with open('orf.csv', 'a', newline='') as file:
+        body = response.xpath('//body')
+        if body:
+            text = self.text_parser(body)
+            url = urllib.parse.urlparse(response.url)
+            if len(text) > 500:
+                with open('scrape.csv', 'a', newline='') as file:
                     writer = csv.writer(file, delimiter = ',', quotechar = '"', quoting=csv.QUOTE_MINIMAL)
-                    url = urllib.parse.urlparse(response.url)
-                    writer.writerow([url.netloc, full_text])
+                    writer.writerow([url.netloc, text])
+                self.scrape_counter += 1
+                if self.scrape_counter % 10 == 0:
+                    self.logger.info("scrape count of {0}: {1}".format(self.allowed_domains[0], self.scrape_counter))
 
-            for next_page in sel.xpath('//a/@href').extract():
-                if "pdf" not in next_page:
+        for next_page in response.xpath('//a/@href').extract():
+            if "pdf" not in next_page and "mailto" not in next_page:
+                if self.scrape_counter < self.scrape_max:
                     yield response.follow(next_page, self.parse)
